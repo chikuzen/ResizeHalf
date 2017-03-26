@@ -60,7 +60,7 @@ static void proc_hv(const uint8_t* srcp, uint8_t* dstp, const size_t width,
             __m128i s1 = load<ALIGNED>(s + 4 * x + sstride);
             s1 = resize_h(s1, load<ALIGNED>(s + 4 * x + 16 + sstride));
             s0 = _mm_avg_epu8(s0, _mm_subs_epu8(s1, one));
-            _mm_store_si128(reinterpret_cast<__m128i*>(d + 2 * x), s0);
+            _mm_stream_si128(reinterpret_cast<__m128i*>(d + 2 * x), s0);
         }
         s += 2 * sstride;
         d += dstride;
@@ -70,7 +70,7 @@ static void proc_hv(const uint8_t* srcp, uint8_t* dstp, const size_t width,
         for (size_t x = 0; x < w; x += 8) {
             __m128i s0 = load<ALIGNED>(s + 4 * x);
             s0 = resize_h(s0, load<ALIGNED>(s + 4 * x + 16));
-            _mm_store_si128(reinterpret_cast<__m128i*>(d + 2 * x), s0);
+            _mm_stream_si128(reinterpret_cast<__m128i*>(d + 2 * x), s0);
         }
     }
 
@@ -95,6 +95,78 @@ static void proc_hv(const uint8_t* srcp, uint8_t* dstp, const size_t width,
 }
 
 
+static F_INLINE __m128i
+resize_h_g(const __m128i& l0, const __m128i& l1, const __m128i& r0,
+           const __m128i& r1, const __m128i& mask)
+{
+    __m128i l = _mm_packus_epi16(_mm_and_si128(l0, mask), _mm_and_si128(l1, mask));
+    __m128i r = _mm_packus_epi16(_mm_and_si128(r0, mask), _mm_and_si128(r1, mask));
+    return _mm_avg_epu8(l, r);
+}
+
+
+template <bool ALIGNED>
+static void proc_hv_g(const uint8_t* srcp, uint8_t* dstp, const size_t width,
+                      const size_t height, const size_t sstride,
+                      const size_t dstride) noexcept
+{
+    auto s = srcp;
+    auto d = dstp;
+    auto w = width & ~1;
+    auto h = height & ~1;
+    const __m128i mask = _mm_set1_epi16(0x00FF);
+    const __m128i one = _mm_set1_epi8(1);
+
+    for (size_t y = 0; y < h; y += 2) {
+        for (size_t x = 0; x < w; x += 32) {
+            __m128i l0 = load<ALIGNED>(s + x);
+            __m128i l1 = load<ALIGNED>(s + x + 16);
+            __m128i r0 = load<false>(s + x + 1);
+            __m128i r1 = load<false>(s + x + 17);
+            __m128i s0 = resize_h_g(l0, l1, r0, r1, mask);
+
+            l0 = load<ALIGNED>(s + x + sstride);
+            l1 = load<ALIGNED>(s + x + 16 + sstride);
+            r0 = load<false>(s + x + 1 + sstride);
+            r1 = load<false>(s + x + 17 + sstride);
+            __m128i s1 = resize_h_g(l0, l1, r0, r1, mask);
+
+            s0 = _mm_avg_epu8(s0, _mm_subs_epu8(s1, one));
+            _mm_stream_si128(reinterpret_cast<__m128i*>(d + x / 2), s0);
+        }
+        s += 2 * sstride;
+        d += dstride;
+    }
+
+    if (h != height) {
+        for (size_t x = 0; x < w; x += 32) {
+            __m128i l0 = load<ALIGNED>(s + x);
+            __m128i l1 = load<ALIGNED>(s + x + 16);
+            __m128i r0 = load<false>(s + x + 1);
+            __m128i r1 = load<false>(s + x + 17);
+            __m128i s0 = resize_h_g(l0, l1, r0, r1, mask);
+            _mm_stream_si128(reinterpret_cast<__m128i*>(d + x / 2), s0);
+        }
+    }
+
+    if (w != width) {
+        auto ss = srcp + w;
+        auto dd = dstp + ((width + 1) / 2 - 1);
+
+        for (size_t y = 0; y < h; y += 2) {
+            *dd = (ss[0] + ss[sstride] + 1) / 2;
+            ss += 2 * sstride;
+            dd += dstride;
+        }
+
+        if (h != height) {
+            *dd = *ss;
+        }
+    }
+
+}
+
+
 template <bool ALIGNED>
 static void proc_h(const uint8_t* srcp, uint8_t* dstp, const size_t width,
                    const size_t height, const size_t sstride,
@@ -109,7 +181,7 @@ static void proc_h(const uint8_t* srcp, uint8_t* dstp, const size_t width,
             __m128i s0 = load<ALIGNED>(s + 4 * x);
             __m128i s1 = load<ALIGNED>(s + 4 * x + 16);
             s0 = resize_h(s0, s1);
-            _mm_store_si128(reinterpret_cast<__m128i*>(d + 2 * x), s0);
+            _mm_stream_si128(reinterpret_cast<__m128i*>(d + 2 * x), s0);
         }
         s += sstride;
         d += dstride;
@@ -125,7 +197,42 @@ static void proc_h(const uint8_t* srcp, uint8_t* dstp, const size_t width,
             dd += dstride;
         }
     }
+}
 
+
+template <bool ALIGNED>
+static void proc_h_g(const uint8_t* srcp, uint8_t* dstp, const size_t width,
+                     const size_t height, const size_t sstride,
+                     const size_t dstride) noexcept
+{
+    auto s = srcp;
+    auto d = dstp;
+    auto w = width & ~1;
+
+    const __m128i mask = _mm_set1_epi16(0x00FF);
+
+    for (size_t y = 0; y < height; ++y) {
+        for (size_t x = 0; x < w; x += 32) {
+            __m128i l0 = load<ALIGNED>(s + x);
+            __m128i l1 = load<ALIGNED>(s + x + 16);
+            __m128i r0 = load<false>(s + x + 1);
+            __m128i r1 = load<false>(s + x + 17);
+            l0 = resize_h_g(l0, l1, r0, r1, mask);
+            _mm_stream_si128(reinterpret_cast<__m128i*>(d + x / 2), l0);
+        }
+        s += sstride;
+        d += dstride;
+    }
+
+    if (w != width) {
+        auto ss = srcp + w;
+        auto dd = dstp + ((width + 1) / 2 - 1);
+        for (size_t y = 0; y < height; ++y) {
+            *dd = *ss;
+            ss += sstride;
+            dd += dstride;
+        }
+    }
 }
 
 
@@ -141,7 +248,7 @@ static void proc_v(const uint8_t* srcp, uint8_t* dstp, const size_t width,
             __m128i s0 = load<ALIGNED>(srcp + 4 * x);
             __m128i s1 = load<ALIGNED>(srcp + 4 * x + sstride);
             s0 = _mm_avg_epu8(s0, s1);
-            _mm_store_si128(reinterpret_cast<__m128i*>(dstp + 4 * x), s0);
+            _mm_stream_si128(reinterpret_cast<__m128i*>(dstp + 4 * x), s0);
         }
         srcp += 2 * sstride;
         dstp += dstride;
@@ -151,6 +258,31 @@ static void proc_v(const uint8_t* srcp, uint8_t* dstp, const size_t width,
         std::memcpy(dstp, srcp, width * 4);
     }
 }
+
+
+template <bool ALIGNED>
+static void proc_v_g(const uint8_t* srcp, uint8_t* dstp, const size_t width,
+                     const size_t height, const size_t sstride,
+                     const size_t dstride) noexcept
+{
+    auto h = height & ~1;
+
+    for (size_t y = 0; y < h; y += 2) {
+        for (size_t x = 0; x < width; x += 16) {
+            __m128i s0 = load<ALIGNED>(srcp + x);
+            __m128i s1 = load<ALIGNED>(srcp + x + sstride);
+            s0 = _mm_avg_epu8(s0, s1);
+            _mm_stream_si128(reinterpret_cast<__m128i*>(dstp + x), s0);
+        }
+        srcp += 2 * sstride;
+        dstp += dstride;
+    }
+
+    if (h != height) {
+        std::memcpy(dstp, srcp, width);
+    }
+}
+
 #else // __SSE2__
 
 #include <cstdlib>
@@ -206,6 +338,36 @@ static void proc_hv(const uint8_t* srcp, uint8_t* dstp, const size_t width,
 }
 
 
+static void proc_hv_g(const uint8_t* srcp, uint8_t* dstp, const size_t width,
+                      const size_t height, const size_t sstride,
+                      const size_t dstride) noexcept
+{
+    auto w = width & ~1;
+    auto h = height & ~1;
+
+    for (size_t y = 0; y < h; y += 2) {
+        auto sb = srcp + sstride;
+        for (size_t x = 0; x < w; x += 2) {
+            dstp[x / 2] = (srcp[x] + srcp[x + 1] + sb[x] + sb[x + 1] + 2) / 4;
+        }
+        if (w != width) {
+            dstp[(width + 1) / 2 - 1] = (srcp[w] + sb[w] + 1) / 2;
+        }
+        srcp += 2 * sstride;
+        dstp += dstride;
+    }
+
+    if (h != height) {
+        for (size_t x = 0; x < w; x += 2) {
+            dstp[x / 2] = (srcp[x] + srcp[x + 1] + 1) / 2;
+        }
+        if (w != width) {
+            dstp[(width + 1) / 2 - 1] = srcp[w];
+        }
+    }
+}
+
+
 static void proc_h(const uint8_t* srcp, uint8_t* dstp, const size_t width,
                    const size_t height, const size_t sstride,
                    const size_t dstride) noexcept
@@ -229,6 +391,25 @@ static void proc_h(const uint8_t* srcp, uint8_t* dstp, const size_t width,
         }
         s += ss;
         d += ds;
+    }
+}
+
+
+static void proc_h_g(const uint8_t* srcp, uint8_t* dstp, const size_t width,
+                     const size_t height, const size_t sstride,
+                     const size_t dstride) noexcept
+{
+    auto w = width & ~1;
+
+    for (size_t y = 0; y < height; ++y) {
+        for (size_t x = 0; x < w; x += 2) {
+            dstp[x / 2] = (srcp[x] + srcp[x + 1] + 1) / 2;
+        }
+        if (w != width) {
+            dstp[(width + 1) / 2 - 1] = srcp[w];
+        }
+        srcp += sstride;
+        dstp += dstride;
     }
 }
 
@@ -260,19 +441,47 @@ static void proc_v(const uint8_t* srcp, uint8_t* dstp, const size_t width,
     }
 }
 
+
+static void proc_v_g(const uint8_t* srcp, uint8_t* dstp, const size_t width,
+                     const size_t height, const size_t sstride,
+                     const size_t dstride) noexcept
+{
+    auto h = height & ~1;
+
+    for (size_t y = 0; y < h; y += 2) {
+        auto sb = srcp + sstride;
+        for (size_t x = 0; x < width; ++x) {
+            dstp[x] = (srcp[x] + sb[x] + 1) / 2;
+        }
+        srcp += 2 * sstride;
+        dstp += dstride;
+    }
+
+    if (h != height) {
+        std::memcpy(dstp, srcp, width);
+    }
+}
+
 #endif
 
 
+enum ProcType : int {
+    PROC_HV,
+    PROC_H,
+    PROC_V,
+};
+
+
 ResizeHalf::
-ResizeHalf(const size_t mw, const size_t mh, const size_t a) : image(nullptr)
+ResizeHalf(const FMT fmt, const size_t a) : image(nullptr), format(fmt)
 {
     if ((a & 15) != 0) {
         throw std::runtime_error("invalid align was specified");
     }
     align = a - 1;
-    width = mw;
-    height = mh;
-    stride = (mw * 4 + align) & ~align;
+    width = 4096;
+    height = 4096;
+    stride = (width * format + align) & ~align;
     alloc();
 }
 
@@ -285,6 +494,12 @@ ResizeHalf::~ResizeHalf()
     std::free(image);
 #endif
     image = nullptr;
+}
+
+
+void ResizeHalf::setFormat(const FMT f) noexcept
+{
+    format = f;
 }
 
 
@@ -305,16 +520,24 @@ void ResizeHalf::alloc()
 
 
 const size_t ResizeHalf::
-prepare(const size_t sw, const size_t sh, const size_t ss, ProcType pt)
+prepare(const uint8_t* srcp, const size_t sw, const size_t sh, const size_t ss,
+        int pt)
 {
-    size_t sstride = ss == 0 ? sw * 4 : ss;
-    if (sstride < sw * 4) {
+    if (!srcp) {
+        throw std::runtime_error("null pointer exception.");
+    }
+
+    size_t sstride = ss;
+    if (sstride == 0) {
+        sstride = format == GREY8 ? (sw + 3) & ~3 : sw * 4;
+    }
+    if (sstride < sw * format) {
         throw std::runtime_error("inavlid stride was specified.");
     }
 
     width = pt == PROC_V ? sw : (sw + 1) / 2;
     height = pt == PROC_H ? sh : (sh + 1) / 2;
-    stride = (width * 4 + align) & ~align;
+    stride = (width * format + align) & ~align;
     if (height * stride > buffsize) {
         alloc();
     }
@@ -323,73 +546,101 @@ prepare(const size_t sw, const size_t sh, const size_t ss, ProcType pt)
 }
 
 
-template <ResizeHalf::ProcType TYPE>
 void ResizeHalf::
-resize(const uint8_t* srcp, const size_t sw, const size_t sh,
-       const size_t ss)
+copyToDst(uint8_t* dstp, const size_t ds) noexcept
 {
-    auto sstride = prepare(sw, sh, ss, TYPE);
+    if (!dstp) {
+        return;
+    }
+
+    auto dstride = ds;
+    if (dstride == 0) {
+        dstride = format == GREY8 ? (width + 3) & ~3 : width * 4;
+    }
+
+    const uint8_t* s = image;
+    for (size_t y = 0; y < height; ++y) {
+        std::memcpy(dstp, s, width * format);
+        s += stride;
+        dstp += dstride;
+    }
+}
+
+
+void ResizeHalf::
+resizeHV(uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
+         const size_t ds, const size_t ss)
+{
+    auto sstride = prepare(srcp, sw, sh, ss, PROC_HV);
 
 #if defined(__SSE2__)
     if (((reinterpret_cast<uintptr_t>(srcp) | sstride) & align) == 0) {
-        switch (TYPE) {
-        case PROC_HV:
+        if (format == GREY8) {
+            proc_hv_g<true>(srcp, image, sw, sh, sstride, stride);
+        } else {
             proc_hv<true>(srcp, image, sw, sh, sstride, stride);
-            return;
-        case PROC_H:
-            proc_h<true>(srcp, image, sw, sh, sstride, stride);
-            return;
-        default:
-            proc_v<true>(srcp, image, sw, sh, sstride, stride);
-            return;
-        }
-    } else {
-        switch (TYPE) {
-        case PROC_HV:
-            proc_hv<false>(srcp, image, sw, sh, sstride, stride);
-            return;
-        case PROC_H:
-            proc_h<false>(srcp, image, sw, sh, sstride, stride);
-            return;
-        default:
-            proc_v<false>(srcp, image, sw, sh, sstride, stride);
         }
     }
 #else
-    switch (TYPE) {
-    case PROC_HV:
+    if (format == GREY8) {
+        proc_hv_g(srcp, image, sw, sh, sstride, stride);
+    } else {
         proc_hv(srcp, image, sw, sh, sstride, stride);
-        return;
-    case PROC_H:
+    }
+#endif
+
+    copyToDst(dstp, ds);
+}
+
+
+void ResizeHalf::
+resizeHorizontal(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
+                 const size_t sh, const size_t ds, const size_t ss)
+{
+    auto sstride = prepare(srcp, sw, sh, ss, PROC_H);
+
+#if defined(__SSE2__)
+    if (((reinterpret_cast<uintptr_t>(srcp) | sstride) & align) == 0) {
+        if (format == GREY8) {
+            proc_h_g<true>(srcp, image, sw, sh, sstride, stride);
+        } else {
+            proc_h<true>(srcp, image, sw, sh, sstride, stride);
+        }
+    }
+#else
+    if (format == GREY8) {
+        proc_h_g(srcp, image, sw, sh, sstride, stride);
+    } else {
         proc_h(srcp, image, sw, sh, sstride, stride);
-        return;
-    default:
+    }
+#endif
+
+    copyToDst(dstp, ds);
+}
+
+
+void ResizeHalf::
+resizeVertical(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
+               const size_t sh, const size_t ds, const size_t ss)
+{
+    auto sstride = prepare(srcp, sw, sh, ss, PROC_V);
+
+#if defined(__SSE2__)
+    if (((reinterpret_cast<uintptr_t>(srcp) | sstride) & align) == 0) {
+        if (format == GREY8) {
+            proc_v_g<true>(srcp, image, sw, sh, sstride, stride);
+        } else {
+            proc_v<true>(srcp, image, sw, sh, sstride, stride);
+        }
+    }
+#else
+    if (format == GREY8) {
+        proc_v_g(srcp, image, sw, sh, sstride, stride);
+    } else {
         proc_v(srcp, image, sw, sh, sstride, stride);
     }
 #endif
-}
 
-
-void ResizeHalf::
-resizeHV(const uint8_t* srcp, const size_t sw, const size_t sh,
-         const size_t ss)
-{
-    resize<PROC_HV>(srcp, sw, sh, ss);
-}
-
-
-void ResizeHalf::
-resizeHorizontal(const uint8_t* srcp, const size_t sw, const size_t sh,
-                 const size_t ss)
-{
-    resize<PROC_H>(srcp, sw, sh, ss);
-}
-
-
-void ResizeHalf::
-resizeVertical(const uint8_t* srcp, const size_t sw, const size_t sh,
-               const size_t ss)
-{
-    resize<PROC_V>(srcp, sw, sh, ss);
+    copyToDst(dstp, ds);
 }
 
