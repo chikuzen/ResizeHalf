@@ -1,0 +1,11 @@
+test/*
+Debug/*
+Release/*
+.vs/*
+x64/*
+
+*.sln
+*.db
+*.opendb
+*.filters
+*.user
