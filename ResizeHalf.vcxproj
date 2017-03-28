@@ -136,7 +136,10 @@
     <ClCompile Include="ResizeHalf.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="bilinear_functions.h" />
+    <ClInclude Include="reduceby2_functions.h" />
     <ClInclude Include="ResizeHalf.h" />
+    <ClInclude Include="rh_common.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
