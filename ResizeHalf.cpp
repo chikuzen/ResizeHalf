@@ -25,9 +25,6 @@ ResizeHalf(const FMT fmt, const MODE m, const size_t a) :
     format(fmt), mode(m), image(nullptr), buffsize(0), width(0), height(0),
     stride(0)
 {
-    if (format == RGB888) {
-        throw std::runtime_error("not implemented yet!");
-    }
     if ((a & 15) != 0) {
         throw std::runtime_error("invalid align was specified");
     }
@@ -152,7 +149,7 @@ resizeHV(uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
 
 #if defined(__SSE2__)
     if (format != RGB888) {
-        if (((reinterpret_cast<size_t>(srcp) | sstride) & align) != 0) {
+        if (((reinterpret_cast<size_t>(srcp) | sstride) & align) == 0) {
             proc |= ALIGNED_IMAGE;
         }
     }
@@ -174,7 +171,7 @@ resizeHV(uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
         bilinear_hv_grey<false>(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | BILINEAR | RGB888):
-        bilinear_hv_rgb(srcp, image, sw, sh, sstride, stride);
+        bilinear_hv_rgb888(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | BILINEAR | RGBA8888):
         bilinear_hv_rgba<false>(srcp, image, sw, sh, sstride, stride);
@@ -197,7 +194,7 @@ resizeHV(uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
         bilinear_hv_grey_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (BILINEAR | RGB888):
-        bilinear_hv_rgb_c(srcp, image, sw, sh, sstride, stride);
+        bilinear_hv_rgb888_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (BILINEAR | RGBA8888):
         bilinear_hv_rgba_c(srcp, image, sw, sh, sstride, stride);
@@ -229,7 +226,7 @@ resizeHorizontal(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
 
 #if defined(__SSE2__)
     if (format != RGB888) {
-        if (((reinterpret_cast<size_t>(srcp) | sstride) & align) != 0) {
+        if (((reinterpret_cast<size_t>(srcp) | sstride) & align) == 0) {
             proc |= ALIGNED_IMAGE;
         }
     }
@@ -251,7 +248,7 @@ resizeHorizontal(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
         bilinear_h_grey<false>(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | BILINEAR | RGB888):
-        bilinear_h_rgb(srcp, image, sw, sh, sstride, stride);
+        bilinear_h_rgb888(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | BILINEAR | RGBA8888):
         bilinear_h_rgba<false>(srcp, image, sw, sh, sstride, stride);
@@ -274,7 +271,7 @@ resizeHorizontal(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
         bilinear_h_grey_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (BILINEAR | RGB888):
-        bilinear_h_rgb_c(srcp, image, sw, sh, sstride, stride);
+        bilinear_h_rgb888_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (BILINEAR | RGBA8888):
         bilinear_h_rgba_c(srcp, image, sw, sh, sstride, stride);
@@ -328,7 +325,7 @@ resizeVertical(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
         bilinear_v_grey<false>(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | BILINEAR | RGB888):
-        bilinear_v_rgb(srcp, image, sw, sh, sstride, stride);
+        bilinear_v_rgb888(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | BILINEAR | RGBA8888):
         bilinear_v_rgba<false>(srcp, image, sw, sh, sstride, stride);
@@ -351,7 +348,7 @@ resizeVertical(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
         bilinear_v_grey_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (BILINEAR | RGB888):
-        bilinear_v_rgb_c(srcp, image, sw, sh, sstride, stride);
+        bilinear_v_rgb888_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (BILINEAR | RGBA8888):
         bilinear_v_rgba_c(srcp, image, sw, sh, sstride, stride);

@@ -4,6 +4,11 @@
 #include <cstdint>
 #include <stdexcept>
 
+#define RESIZE_HALF_VERSION_MAJOR   0
+#define RESIZE_HALF_VERSION_MINOR   0
+#define RESIZE_HALF_VERSION_PATCH   0
+#define RESIZE_HALF_VERSION_STRING  "0.0.0"
+
 // GCC/clangでx86系用にコンパイルする際は、-mssse3を付けること
 
 // 処理中になんらかのエラーが発生した場合はstd::runtime_errorを投げるので注意
@@ -41,7 +46,7 @@ public:
     // 縮小する画像の形式
     enum FMT : int {
         GREY8       = 1,
-        RGB888      = 3, // 未実装
+        RGB888      = 3,
         RGBA8888    = 4,
     };
 

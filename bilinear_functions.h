@@ -3,7 +3,7 @@
 
 #include "rh_common.h"
 
-#if defined(__SSE2__)
+#if defined(__SSSE3__)
 
 // Bilinear Resize for RGBA
 static F_INLINE __m128i bl_h_rgba(const __m128i& _a, const __m128i& _b)
@@ -19,29 +19,26 @@ static void bilinear_hv_rgba(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
-    auto s = srcp;
-    auto d = dstp;
     auto w = width & ~1;
     auto h = height & ~1;
 
     const __m128i one = _mm_set1_epi8(1);
 
     for (size_t y = 0; y < h; y += 2) {
+        auto sb = srcp + sstride;
         for (size_t x = 0; x < w; x += 8) {
-            __m128i s0 = bl_h_rgba(
-                load<ALIGNED>(s + 4 * x),
-                load<ALIGNED>(s + 4 * x + 16));
-
-            __m128i s1 = bl_h_rgba(
-                load<ALIGNED>(s + 4 * x + sstride),
-                load<ALIGNED>(s + 4 * x + 16 + sstride));
-
-            s0 = _mm_avg_epu8(s0, _mm_subs_epu8(s1, one));
-            _mm_stream_si128(reinterpret_cast<__m128i*>(d + 2 * x), s0);
+            __m128i s0 = _mm_avg_epu8(
+                load<ALIGNED>(srcp + 4 * x), load<ALIGNED>(sb + 4 * x));
+            __m128i s1 = _mm_avg_epu8(
+                load<ALIGNED>(srcp + 4 * x + 16), load<ALIGNED>(sb + 4 * x + 16));
+            s0 = bl_h_rgba(s0, _mm_subs_epu8(s1, one));
+            stream(dstp + 2 * x, s0);
         }
-        s += 2 * sstride;
-        d += dstride;
+        srcp += 2 * sstride;
+        dstp += dstride;
     }
+
+
 }
 
 
@@ -57,7 +54,7 @@ static void bilinear_h_rgba(
             __m128i ret = bl_h_rgba(
                 load<ALIGNED>(srcp + 4 * x),
                 load<ALIGNED>(srcp + 4 * x + 16));
-            _mm_stream_si128(reinterpret_cast<__m128i*>(dstp + 2 * x), ret);
+            stream(dstp + 2 * x, ret);
         }
         srcp += sstride;
         dstp += dstride;
@@ -77,7 +74,7 @@ static void bilinear_v_rgba(
             __m128i ret = _mm_avg_epu8(
                 load<ALIGNED>(srcp + 4 * x),
                 load<ALIGNED>(srcp + 4 * x + sstride));
-            _mm_stream_si128(reinterpret_cast<__m128i*>(dstp + 4 * x), ret);
+            stream(dstp + 4 * x, ret);
         }
         srcp += 2 * sstride;
         dstp += dstride;
@@ -106,17 +103,14 @@ static void bilinear_hv_grey(
     const __m128i one = _mm_set1_epi8(1);
 
     for (size_t y = 0; y < h; y += 2) {
+        auto sb = srcp + sstride;
         for (size_t x = 0; x < w; x += 32) {
-            __m128i s0 = bl_h_grey(
-                load<ALIGNED>(srcp + x),
-                load<ALIGNED>(srcp + x + 16), mask);
-
-            __m128i s1 = bl_h_grey(
-                load<ALIGNED>(srcp + x + sstride),
-                load<ALIGNED>(srcp + x + 16 + sstride), mask);
-
-            s0 = _mm_avg_epu8(s0, _mm_subs_epu8(s1, one));
-            _mm_stream_si128(reinterpret_cast<__m128i*>(dstp + x / 2), s0);
+            __m128i s0 = _mm_avg_epu8(
+                load<ALIGNED>(srcp + x), load<ALIGNED>(sb + x));
+            __m128i s1 = _mm_avg_epu8(
+                load<ALIGNED>(srcp + x + 16), load<ALIGNED>(sb + x + 16));
+            s0 = bl_h_grey(s0, _mm_subs_epu8(s1, one), mask);
+            stream(dstp + x / 2, s0);
         }
         srcp += 2 * sstride;
         dstp += dstride;
@@ -137,7 +131,7 @@ static void bilinear_h_grey(
             __m128i ret = bl_h_grey(
                 load<ALIGNED>(srcp + x),
                 load<ALIGNED>(srcp + x + 16), mask);
-            _mm_stream_si128(reinterpret_cast<__m128i*>(dstp + x / 2), ret);
+            stream(dstp + x / 2, ret);
         }
         srcp += sstride;
         dstp += dstride;
@@ -157,7 +151,7 @@ static void bilinear_v_grey(
             __m128i ret = _mm_avg_epu8(
                 load<ALIGNED>(srcp + x),
                 load<ALIGNED>(srcp + x + sstride));
-            _mm_stream_si128(reinterpret_cast<__m128i*>(dstp + x), ret);
+            stream(dstp + x, ret);
         }
         srcp += 2 * sstride;
         dstp += dstride;
@@ -166,30 +160,67 @@ static void bilinear_v_grey(
 
 
 // Bilinear Resize for RGB888
-static void bilinear_hv_rgb(
+static void bilinear_hv_rgb888(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
-    // not implemented yet...
+    auto w = width & ~1;
+    auto h = height & ~1;
+
+    const __m128i smask0 = _mm_setr_epi8(
+        0, 1, 2, -1, 3, 4, 5, -1, 6, 7, 8, -1, 9, 10, 11, -1);
+    const __m128i smask1 = _mm_setr_epi8(
+        0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, -1, -1, -1, -1);
+
+    for (size_t y = 0; y < h; y += 2) {
+        auto sb = srcp + sstride;
+        for (size_t x = 0; x < w; x += 8) {
+            __m128i s0 = _mm_avg_epu8(
+                load<false>(srcp + 3 * x), load<false>(sb + 3 * x));
+            __m128i s1 = _mm_avg_epu8(
+                load<false>(srcp + 3 * x + 12), load<false>(sb + 3 * x + 12));
+            s0 = _mm_shuffle_epi8(s0, smask0);
+            s1 = _mm_shuffle_epi8(s1, smask0);
+            s0 = _mm_shuffle_epi8(bl_h_rgba(s0, s1), smask1);
+            storeu(dstp + 3 * x / 2, s0);
+        }
+        srcp += 2 * sstride;
+        dstp += dstride;
+    }
 }
 
 
-static void bilinear_h_rgb(
+static void bilinear_h_rgb888(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
-    // not implemented yet...
+    auto w = width & ~1;
+    const __m128i smask0 = _mm_setr_epi8(
+        0, 1, 2, -1, 3, 4, 5, -1, 6, 7, 8, -1, 9, 10, 11, -1);
+    const __m128i smask1 = _mm_setr_epi8(
+        0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, -1, -1, -1, -1);
+
+    for (size_t y = 0; y < height; ++y) {
+        for (size_t x = 0; x < w; x += 8) {
+            __m128i s0 = _mm_shuffle_epi8(load<false>(srcp + 3 * x), smask0);
+            __m128i s1 = _mm_shuffle_epi8(load<false>(srcp + 3 * x + 12), smask0);
+            s0 = _mm_shuffle_epi8(bl_h_rgba(s0, s1), smask1);
+            storeu(dstp + 3 * x / 2, s0);
+        }
+        srcp += sstride;
+        dstp += dstride;
+    }
 }
 
 
-static void bilinear_v_rgb(
+static void bilinear_v_rgb888(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
-    // not implemented yet...
+    bilinear_v_grey<false>(srcp, dstp, width * 3, height, sstride, dstride);
 }
 
-#endif // __SSE2__
+#endif // __SSSE3__
 
 // Bilinear Resize for RGBA (no SIMD)
 static void bilinear_hv_rgba_c(
@@ -206,12 +237,9 @@ static void bilinear_hv_rgba_c(
     for (size_t y = 0; y < h; y += 2) {
         auto sb = s + ss;
         for (size_t x = 0; x < w; x += 2) {
-            auto dx = x / 2;
-            auto foo = s[x];
-            d[dx].r = (s[x].r + s[x + 1].r + sb[x].r + sb[x + 1].r + 2) / 4;
-            d[dx].g = (s[x].g + s[x + 1].g + sb[x].g + sb[x + 1].g + 2) / 4;
-            d[dx].b = (s[x].b + s[x + 1].b + sb[x].b + sb[x + 1].b + 2) / 4;
-            d[dx].a = (s[x].a + s[x + 1].a + sb[x].a + sb[x + 1].a + 2) / 4;
+            d[x / 2] = (
+                RGBAi(s[x], 1) + RGBAi(s[x + 1], 1) +
+                RGBAi(sb[x], 1) + RGBAi(sb[x + 1], 1)).div4<RGBA>();
         }
         s += 2 * ss;
         d += ds;
@@ -231,11 +259,7 @@ static void bilinear_h_rgba_c(
 
     for (size_t y = 0; y < height; ++y) {
         for (size_t x = 0; x < w; x += 2) {
-            auto dx = x / 2;
-            d[dx].r = (s[x].r + s[x + 1].r + 1) / 2;
-            d[dx].g = (s[x].g + s[x + 1].g + 1) / 2;
-            d[dx].b = (s[x].b + s[x + 1].b + 1) / 2;
-            d[dx].a = (s[x].a + s[x + 1].a + 1) / 2;
+            d[x / 2] = (RGBAi(s[x], 1) + RGBAi(s[x + 1], 1)).div2<RGBA>();
         }
         s += ss;
         d += ds;
@@ -256,10 +280,7 @@ static void bilinear_v_rgba_c(
     for (size_t y = 0; y < h; y += 2) {
         auto sb = s + ss;
         for (size_t x = 0; x < width; ++x) {
-            d[x].r = (s[x].r + sb[x].r + 1) / 2;
-            d[x].g = (s[x].g + sb[x].g + 1) / 2;
-            d[x].b = (s[x].b + sb[x].b + 1) / 2;
-            d[x].a = (s[x].a + sb[x].a + 1) / 2;
+            d[x] = (RGBAi(s[x], 1) + RGBAi(sb[x], 1)).div2<RGBA>();
         }
         s += 2 * ss;
         d += ds;
@@ -320,27 +341,51 @@ static void bilinear_h_grey_c(
 
 
 // Bilinear Resize for RGB888 (no SIMD)
-static void bilinear_hv_rgb_c(
+static void bilinear_hv_rgb888_c(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
-    // not implemented yet...
+    auto w = width & ~1;
+    auto h = height & ~1;
+
+    for (size_t y = 0; y < h; y += 2) {
+        auto sa = reinterpret_cast<const RGB24*>(srcp);
+        auto sb = reinterpret_cast<const RGB24*>(srcp + sstride);
+        auto d = reinterpret_cast<RGB24*>(dstp);
+        for (size_t x = 0; x < w; x += 2) {
+            d[x / 2] = (
+                RGBAi(sa[x], 1) + RGBAi(sa[x + 1], 1) +
+                RGBAi(sb[x], 1) + RGBAi(sb[x + 1], 1)).div4<RGB24>();
+        }
+        srcp += 2 * sstride;
+        dstp += dstride;
+    }
 }
 
 
-static void bilinear_h_rgb_c(
+static void bilinear_h_rgb888_c(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
-    // not implemented yet...
+    auto w = width & ~1;
+
+    for (size_t y = 0; y < height; ++y) {
+        auto s = reinterpret_cast<const RGB24*>(srcp);
+        auto d = reinterpret_cast<RGB24*>(dstp);
+        for (size_t x = 0; x < w; x += 2) {
+            d[x / 2] = (RGBAi(s[x], 1) + RGBAi(s[x + 1], 1)).div2<RGB24>();
+        }
+        srcp += sstride;
+        dstp += dstride;
+    }
 }
 
 
-static void bilinear_v_rgb_c(
+static void bilinear_v_rgb888_c(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
-    // not implemented yet...
+    bilinear_v_grey_c(srcp, dstp, width * 3, height, sstride, dstride);
 }
 
 
