@@ -269,7 +269,11 @@ resizeHorizontal(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
         reduceby2_h_grey<false>(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | REDUCE_BY_2 | RGB888):
+#if defined(__SSSE3__)
         reduceby2_h_rgb888(srcp, image, sw, sh, sstride, stride);
+#else
+        reduceby2_h_rgb888_c(srcp, image, sw, sh, sstride, stride);
+#endif
         break;
     case (UNALIGNED_IMAGE | REDUCE_BY_2 | RGBA8888):
         reduceby2_h_rgba<false>(srcp, image, sw, sh, sstride, stride);

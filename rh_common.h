@@ -4,15 +4,14 @@
 #include <cstdint>
 #include <algorithm>
 
-#pragma warning(disable: 4505)
 
 #if defined(_M_IX86) || defined(_M_AMD64) || defined(__i686) || defined(__x86_64)
     #if !defined(__GNUC__)
+        #pragma warning(disable: 4505)
         #define __SSE2__
         #define __SSSE3__
     #endif
 #endif
-
 
 #if defined(__SSSE3__)
     #include <tmmintrin.h>
@@ -45,22 +44,22 @@ struct RGBAi {
         r(x.r * m), g(x.g * m), b(x.b * m), a(0) {}
     RGBAi(const RGBA& x, const int m=1) :
         r(x.r * m), g(x.g * m), b(x.b * m), a(x.a * m) {}
-    RGBAi& operator +(const RGBAi& x)
+    RGBAi& operator +(const RGBAi& x) noexcept
     {
         r += x.r; g += x.g; b += x.b; a += x.a;
         return *this;
     }
-    RGBAi& operator +(const int x)
+    RGBAi& operator +(const int x) noexcept
     {
         r += x; g += x; b += x; a += x;
         return *this;
     }
-    RGBAi& operator /(const int x)
+    RGBAi& operator /(const int x) noexcept
     {
         r /= x; g /= x; b /= x; a /= x;
         return *this;
     }
-    operator RGB24()
+    operator RGB24() const noexcept
     {
         return RGB24{
             static_cast<uint8_t>(r),
@@ -68,7 +67,7 @@ struct RGBAi {
             static_cast<uint8_t>(b),
         };
     }
-    operator RGBA()
+    operator RGBA() const noexcept
     {
         return RGBA{
             static_cast<uint8_t>(r),
@@ -77,15 +76,15 @@ struct RGBAi {
             static_cast<uint8_t>(a),
         };
     }
-    template <typename T> T div2()
+    template <typename T> T div2() noexcept
     {
         return T((*this + 1) / 2);
     }
-    template <typename T> T div4()
+    template <typename T> T div4() noexcept
     {
         return T((*this + 2) / 4);
     }
-    template <typename T> T div16()
+    template <typename T> T div16() noexcept
     {
         return T((*this + 8) / 16);
     }
