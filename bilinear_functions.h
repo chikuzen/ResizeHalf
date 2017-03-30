@@ -3,7 +3,7 @@
 
 #include "rh_common.h"
 
-#if defined(__SSSE3__)
+#if defined(__SSE2__)
 
 // Bilinear Resize for RGBA
 static F_INLINE __m128i bl_h_rgba(const __m128i& _a, const __m128i& _b)
@@ -37,8 +37,6 @@ static void bilinear_hv_rgba(
         srcp += 2 * sstride;
         dstp += dstride;
     }
-
-
 }
 
 
@@ -158,7 +156,7 @@ static void bilinear_v_grey(
     }
 }
 
-
+#if defined(__SSSE3__)
 // Bilinear Resize for RGB888
 static void bilinear_hv_rgb888(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
@@ -211,7 +209,7 @@ static void bilinear_h_rgb888(
         dstp += dstride;
     }
 }
-
+#endif  //__SSSE3__
 
 static void bilinear_v_rgb888(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
@@ -220,7 +218,7 @@ static void bilinear_v_rgb888(
     bilinear_v_grey<false>(srcp, dstp, width * 3, height, sstride, dstride);
 }
 
-#endif // __SSSE3__
+#endif // __SSE2__
 
 // Bilinear Resize for RGBA (no SIMD)
 static void bilinear_hv_rgba_c(

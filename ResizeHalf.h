@@ -6,8 +6,8 @@
 
 #define RESIZE_HALF_VERSION_MAJOR   0
 #define RESIZE_HALF_VERSION_MINOR   0
-#define RESIZE_HALF_VERSION_PATCH   0
-#define RESIZE_HALF_VERSION_STRING  "0.0.0"
+#define RESIZE_HALF_VERSION_PATCH   1
+#define RESIZE_HALF_VERSION_STRING  "0.0.1"
 
 // GCC/clangでx86系用にコンパイルする際は、-mssse3を付けること
 

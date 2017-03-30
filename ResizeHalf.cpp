@@ -171,7 +171,11 @@ resizeHV(uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
         bilinear_hv_grey<false>(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | BILINEAR | RGB888):
+#if defined(__SSSE3__)
         bilinear_hv_rgb888(srcp, image, sw, sh, sstride, stride);
+#else
+        bilinear_hv_rgb888_c(srcp, image, sw, sh, sstride, stride);
+#endif
         break;
     case (UNALIGNED_IMAGE | BILINEAR | RGBA8888):
         bilinear_hv_rgba<false>(srcp, image, sw, sh, sstride, stride);
@@ -180,7 +184,11 @@ resizeHV(uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
         reduceby2_hv_grey<false>(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | REDUCE_BY_2 | RGB888):
-        reduceby2_hv_rgb(srcp, image, sw, sh, sstride, stride);
+#if defined(__SSSE3__)
+        reduceby2_hv_rgb888(srcp, image, sw, sh, sstride, stride);
+#else
+        reduceby2_hv_rgb888_c(srcp, image, sw, sh, sstride, stride);
+#endif
         break;
     case (UNALIGNED_IMAGE | REDUCE_BY_2 | RGBA8888):
         reduceby2_hv_rgba<false>(srcp, image, sw, sh, sstride, stride);
@@ -203,7 +211,7 @@ resizeHV(uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
         reduceby2_hv_grey_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (REDUCE_BY_2 | RGB888):
-        reduceby2_hv_rgb_c(srcp, image, sw, sh, sstride, stride);
+        reduceby2_hv_rgb888_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (REDUCE_BY_2 | RGBA8888):
         reduceby2_hv_rgba_c(srcp, image, sw, sh, sstride, stride);
@@ -248,7 +256,11 @@ resizeHorizontal(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
         bilinear_h_grey<false>(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | BILINEAR | RGB888):
+#if defined(__SSSE3__)
         bilinear_h_rgb888(srcp, image, sw, sh, sstride, stride);
+#else
+        bilinear_h_rgb888_c(srcp, image, sw, sh, sstride, stride);
+#endif
         break;
     case (UNALIGNED_IMAGE | BILINEAR | RGBA8888):
         bilinear_h_rgba<false>(srcp, image, sw, sh, sstride, stride);
@@ -257,7 +269,7 @@ resizeHorizontal(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
         reduceby2_h_grey<false>(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | REDUCE_BY_2 | RGB888):
-        reduceby2_h_rgb(srcp, image, sw, sh, sstride, stride);
+        reduceby2_h_rgb888(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | REDUCE_BY_2 | RGBA8888):
         reduceby2_h_rgba<false>(srcp, image, sw, sh, sstride, stride);
@@ -280,7 +292,7 @@ resizeHorizontal(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
         reduceby2_h_grey_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (REDUCE_BY_2 | RGB888):
-        reduceby2_h_rgb_c(srcp, image, sw, sh, sstride, stride);
+        reduceby2_h_rgb888_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (REDUCE_BY_2 | RGBA8888):
         reduceby2_h_rgba_c(srcp, image, sw, sh, sstride, stride);
@@ -334,7 +346,7 @@ resizeVertical(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
         reduceby2_v_grey<false>(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | REDUCE_BY_2 | RGB888):
-        reduceby2_v_rgb(srcp, image, sw, sh, sstride, stride);
+        reduceby2_v_rgb888(srcp, image, sw, sh, sstride, stride);
         break;
     case (UNALIGNED_IMAGE | REDUCE_BY_2 | RGBA8888):
         reduceby2_v_rgba<false>(srcp, image, sw, sh, sstride, stride);
@@ -357,7 +369,7 @@ resizeVertical(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
         reduceby2_v_grey_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (REDUCE_BY_2 | RGB888):
-        reduceby2_v_rgb_c(srcp, image, sw, sh, sstride, stride);
+        reduceby2_v_rgb888_c(srcp, image, sw, sh, sstride, stride);
         break;
     case (REDUCE_BY_2 | RGBA8888):
         reduceby2_v_rgba_c(srcp, image, sw, sh, sstride, stride);

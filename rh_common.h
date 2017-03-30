@@ -13,7 +13,6 @@
     #endif
 #endif
 
-//#undef __SSE2__
 
 #if defined(__SSSE3__)
     #include <tmmintrin.h>

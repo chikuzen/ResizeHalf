@@ -257,7 +257,8 @@ static void reduceby2_h_grey(
             left = center;
         }
         if ((width & 1) == 0) {
-            dstp[width / 2 - 1] = (srcp[width - 2] + srcp[width - 1] * 3 + 2) / 4;
+            dstp[width / 2 - 1] = (
+                srcp[width - 2] + srcp[width - 1] * 3 + 2) / 4;
         }
         srcp += sstride;
         dstp += dstride;
@@ -266,9 +267,9 @@ static void reduceby2_h_grey(
 
 
 template <bool ALIGNED>
-static void reduceby2_v_grey(const uint8_t* srcp, uint8_t* dstp, const size_t width,
-    const size_t height, const size_t sstride,
-    const size_t dstride) noexcept
+static void reduceby2_v_grey(
+    const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
+    const size_t sstride, const size_t dstride) noexcept
 {
     const __m128i one = _mm_set1_epi8(1);
 
@@ -296,7 +297,8 @@ static void reduceby2_v_grey(const uint8_t* srcp, uint8_t* dstp, const size_t wi
 
 
 // ReduceBy2 for RGB888
-static void reduceby2_hv_rgb(
+#if defined(__SSSE3__)
+static void reduceby2_hv_rgb888(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
@@ -375,7 +377,7 @@ static void reduceby2_hv_rgb(
 }
 
 
-static void reduceby2_h_rgb(
+static void reduceby2_h_rgb888(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
@@ -403,9 +405,9 @@ static void reduceby2_h_rgb(
         dstp += dstride;
     }
 }
+#endif  // __SSSE3__
 
-
-static void reduceby2_v_rgb(
+static void reduceby2_v_rgb888(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
@@ -429,7 +431,8 @@ static void reduceby2_hv_rgba_c(
             d[x / 2] = (
                 RGBAi(sa[x], 1) + RGBAi(sa[x + 1], 2) + RGBAi(sa[x + 2], 1) +
                 RGBAi(sb[x], 2) + RGBAi(sb[x + 1], 4) + RGBAi(sb[x + 2], 2) +
-                RGBAi(sc[x], 1) + RGBAi(sc[x + 1], 2) + RGBAi(sc[x + 2], 1)).div16<RGBA>();
+                RGBAi(sc[x], 1) + RGBAi(sc[x + 1], 2) + RGBAi(sc[x + 2], 1)
+                ).div16<RGBA>();
         }
         if ((width & 1) == 0) {
             d[width / 2 - 1] = (
@@ -496,7 +499,8 @@ static void reduceby2_v_rgba_c(
         auto sb = s + ss;
         auto sc = sb + ss;
         for (size_t x = 0; x < width; ++x) {
-            d[x] = (RGBAi(s[x], 1) + RGBAi(sb[x], 2) + RGBAi(sc[x], 1)).div4<RGBA>();
+            d[x] = (
+                RGBAi(s[x], 1) + RGBAi(sb[x], 2) + RGBAi(sc[x], 1)).div4<RGBA>();
         }
         s += 2 * ss;
         d += ds;
@@ -558,7 +562,8 @@ static void reduceby2_v_grey_c(
 {
     for (size_t y = 0; y < height - 2; y += 2) {
         for (size_t x = 0; x < width; ++x) {
-            dstp[x] = (srcp[x] + 2 * srcp[x + sstride] + srcp[x + 2 * sstride] + 2) / 4;
+            dstp[x] = (
+                srcp[x] + 2 * srcp[x + sstride] + srcp[x + 2 * sstride] + 2) / 4;
         }
         srcp += 2 * sstride;
         dstp += dstride;
@@ -573,7 +578,7 @@ static void reduceby2_v_grey_c(
 
 
 // ReduceBy2 for RGB888 (no SIMD)
-static void reduceby2_hv_rgb_c(
+static void reduceby2_hv_rgb888_c(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
@@ -622,7 +627,7 @@ static void reduceby2_hv_rgb_c(
 }
 
 
-static void reduceby2_h_rgb_c(
+static void reduceby2_h_rgb888_c(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
@@ -644,7 +649,7 @@ static void reduceby2_h_rgb_c(
 }
 
 
-static void reduceby2_v_rgb_c(
+static void reduceby2_v_rgb888_c(
     const uint8_t* srcp, uint8_t* dstp, const size_t width, const size_t height,
     const size_t sstride, const size_t dstride) noexcept
 {
