@@ -20,16 +20,10 @@ enum : int {
 };
 
 
-ResizeHalf::
-ResizeHalf(const FMT fmt, const MODE m, const size_t a) :
+ResizeHalf::ResizeHalf(const FMT fmt, const MODE m) :
     format(fmt), mode(m), image(nullptr), buffsize(0), width(0), height(0),
-    stride(0)
-{
-    if ((a & 15) != 0) {
-        throw std::runtime_error("invalid align was specified");
-    }
-    align = a - 1;
-}
+    stride(0), align(16 - 1)
+{}
 
 
 ResizeHalf::~ResizeHalf()
@@ -73,7 +67,7 @@ void ResizeHalf::alloc()
 
 const size_t ResizeHalf::
 prepare(const uint8_t* srcp, const size_t sw, const size_t sh, const size_t ss,
-        int pt)
+        const size_t ds, int pt)
 {
     if (sw < 16 || sh < 16) {
         throw std::runtime_error("source image is too small.");
@@ -93,10 +87,13 @@ prepare(const uint8_t* srcp, const size_t sw, const size_t sh, const size_t ss,
         }
     }
     if (sstride < sw * format) {
-        throw std::runtime_error("inavlid stride was specified.");
+        throw std::runtime_error("inavlid src_stride was specified.");
     }
 
     width = pt == PROC_V ? sw : sw / 2;
+    if (ds != 0 && ds < width * format) {
+        throw std::runtime_error("invalid dst_stride was specified.");
+    }
     height = pt == PROC_H ? sh : sh / 2;
     auto f = format == RGB888 ? 4 : format;
     stride = (width * f + align) & ~align;
@@ -108,8 +105,7 @@ prepare(const uint8_t* srcp, const size_t sw, const size_t sh, const size_t ss,
 }
 
 
-void ResizeHalf::
-copyToDst(uint8_t* dstp, const size_t ds) noexcept
+void ResizeHalf::copyToDst(uint8_t* dstp, const size_t ds) noexcept
 {
     if (!dstp) {
         return;
@@ -140,20 +136,29 @@ copyToDst(uint8_t* dstp, const size_t ds) noexcept
 }
 
 
-void ResizeHalf::
-resizeHV(uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
-         const size_t ds, const size_t ss)
+int ResizeHalf::getFlag(const void* ptr, size_t bytes) const noexcept
 {
-    auto sstride = prepare(srcp, sw, sh, ss, PROC_HV);
-    int proc = (mode | format);
+#if defined(__SSE2__)
+    int flag = (mode | format);
+    if (format != RGB888
+            && ((reinterpret_cast<uintptr_t>(ptr) | bytes) & align) == 0) {
+        flag |= ALIGNED_IMAGE;
+    }
+    return flag;
+#else
+    return (mode | format);
+#endif
+}
+
+
+void ResizeHalf::resizeHV(
+    uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
+    const size_t ds, const size_t ss)
+{
+    auto sstride = prepare(srcp, sw, sh, ss, ds, PROC_HV);
+    int proc = getFlag(srcp, sstride);
 
 #if defined(__SSE2__)
-    if (format != RGB888) {
-        if (((reinterpret_cast<size_t>(srcp) | sstride) & align) == 0) {
-            proc |= ALIGNED_IMAGE;
-        }
-    }
-
     switch (proc) {
     case (ALIGNED_IMAGE | BILINEAR | GREY8):
         bilinear_hv_grey<true>(srcp, image, sw, sh, sstride, stride);
@@ -225,20 +230,14 @@ resizeHV(uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
 }
 
 
-void ResizeHalf::
-resizeHorizontal(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
-                 const size_t sh, const size_t ds, const size_t ss)
+void ResizeHalf::resizeHorizontal(
+    uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
+    const size_t ds, const size_t ss)
 {
-    auto sstride = prepare(srcp, sw, sh, ss, PROC_H);
-    int proc = (mode | format);
+    auto sstride = prepare(srcp, sw, sh, ss, ds, PROC_H);
+    int proc = getFlag(srcp, sstride);
 
 #if defined(__SSE2__)
-    if (format != RGB888) {
-        if (((reinterpret_cast<size_t>(srcp) | sstride) & align) == 0) {
-            proc |= ALIGNED_IMAGE;
-        }
-    }
-
     switch (proc) {
     case (ALIGNED_IMAGE | BILINEAR | GREY8):
         bilinear_h_grey<true>(srcp, image, sw, sh, sstride, stride);
@@ -310,20 +309,14 @@ resizeHorizontal(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
 }
 
 
-void ResizeHalf::
-resizeVertical(uint8_t* dstp, const uint8_t* srcp, const size_t sw,
-               const size_t sh, const size_t ds, const size_t ss)
+void ResizeHalf::resizeVertical(
+    uint8_t* dstp, const uint8_t* srcp, const size_t sw, const size_t sh,
+    const size_t ds, const size_t ss)
 {
-    auto sstride = prepare(srcp, sw, sh, ss, PROC_V);
-    int proc = (mode | format);
+    auto sstride = prepare(srcp, sw, sh, ss, ds, PROC_V);
+    int proc = getFlag(srcp, sstride);
 
 #if defined(__SSE2__)
-    if (format != RGB888) {
-        if (((reinterpret_cast<size_t>(srcp) | sstride) & align) != 0) {
-            proc |= ALIGNED_IMAGE;
-        }
-    }
-
     switch (proc) {
     case (ALIGNED_IMAGE | BILINEAR | GREY8):
         bilinear_v_grey<true>(srcp, image, sw, sh, sstride, stride);

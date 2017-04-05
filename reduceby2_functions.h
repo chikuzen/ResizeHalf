@@ -6,13 +6,25 @@
 #if defined(__SSE2__)
 
 // ReduceBy2 helper
+#if 1
 static F_INLINE __m128i red_by_2(
     const __m128i& s0, const __m128i& s1, const __m128i& s2, const __m128i& one)
 {
     return _mm_avg_epu8(
         _mm_avg_epu8(s0, s1), _mm_subs_epu8(_mm_avg_epu8(s2, s1), one));
 }
-
+#else
+static F_INLINE __m128i red_by_2(   // accurate version
+    const __m128i& s0, const __m128i& s1, const __m128i& s2, const __m128i& one)
+{
+    __m128i t0 = _mm_avg_epu8(s0, s1);
+    __m128i t1 = _mm_avg_epu8(s2, s1);
+    __m128i error = _mm_or_si128(_mm_xor_si128(s0, s1), _mm_xor_si128(s2, s1));
+    __m128i err2 = _mm_xor_si128(t0, t1);
+    error = _mm_and_si128(_mm_and_si128(error, err2), one);
+    return _mm_subs_epu8(_mm_avg_epu8(t0, t1), error);
+}
+#endif
 
 // ReduceBy2 for RGBA
 static F_INLINE __m128i red_by_2_h_rgba(

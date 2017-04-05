@@ -6,8 +6,8 @@
 
 #define RESIZE_HALF_VERSION_MAJOR   0
 #define RESIZE_HALF_VERSION_MINOR   0
-#define RESIZE_HALF_VERSION_PATCH   1
-#define RESIZE_HALF_VERSION_STRING  "0.0.1"
+#define RESIZE_HALF_VERSION_PATCH   2
+#define RESIZE_HALF_VERSION_STRING  "0.0.2"
 
 // GCC/clangでx86系用にコンパイルする際は、-mssse3を付けること
 
@@ -28,18 +28,19 @@
 
 
 class ResizeHalf {
+    const size_t align;
     int format;
     int mode;
     uint8_t* image;
-    size_t align;
     size_t buffsize;
     size_t width;
     size_t height;
     size_t stride;
 
+    int getFlag(const void* ptr, size_t bytes) const noexcept;
     void alloc();
     const size_t prepare(const uint8_t* s, const size_t sw, const size_t sh,
-                         const size_t ss, int pt);
+                         const size_t ss, const size_t ds, int pt);
     void copyToDst(uint8_t* d, const size_t ds) noexcept;
 
 public:
@@ -58,8 +59,7 @@ public:
 
     // format:  処理を行う画像形式
     // mode:    縮小方法
-    // align:   中間バッファのメモリアライメント(16以上の2の累乗)
-    ResizeHalf(const FMT format, const MODE mode=BILINEAR, const size_t align=16);
+    ResizeHalf(const FMT format, const MODE mode=REDUCE_BY_2);
     ~ResizeHalf();
 
     // 処理を行う画像形式を変更する
