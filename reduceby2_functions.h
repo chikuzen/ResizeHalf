@@ -34,7 +34,11 @@ static F_INLINE __m128i red_by_2_h_rgba(
     __m128i t1 = _mm_shuffle_epi32(_c, _MM_SHUFFLE(3, 1, 2, 0));
     __m128i l = _mm_unpacklo_epi64(t0, t1);
     __m128i c = _mm_unpackhi_epi64(t0, t1);
+#if defined(__SSSE3__)
+    __m128i r = _mm_alignr_epi8(_r, l, 4);
+#else
     __m128i r = _mm_or_si128(_mm_srli_si128(l, 4), _mm_slli_si128(_r, 12));
+#endif
     return red_by_2(l, c, r, one);
 }
 
@@ -81,32 +85,20 @@ static void reduceby2_hv_rgba(
     }
 
     if ((height & 1) == 0) {
-        auto sb = srcp + sstride;
-        __m128i s0 = load<ALIGNED>(srcp);
-        __m128i s1 = load<ALIGNED>(sb);
-        __m128i left = red_by_2(s0, s1, s1, one);
+        auto d = reinterpret_cast<RGBA*>(dstp);
+        auto sa = reinterpret_cast<const RGBA*>(srcp);
+        auto sb = reinterpret_cast<const RGBA*>(srcp + sstride);
+        for (size_t x = 0; x < width - 2; x += 2) {
+            d[x / 2] = (
+                RGBAi(sa[x], 1) + RGBAi(sa[x + 1], 2) + RGBAi(sa[x + 2], 1) +
+                RGBAi(sb[x], 3) + RGBAi(sb[x + 1], 6) + RGBAi(sb[x + 2], 3)
+                ).div16<RGBA>();
 
-        for (size_t x = 0; x < width - 2; x += 8) {
-            s0 = load<ALIGNED>(srcp + 4 * x + 16);
-            s1 = load<ALIGNED>(sb + 4 * x + 16);
-            __m128i center = red_by_2(s0, s1, s1, one);
-
-            s0 = load<ALIGNED>(srcp + 4 * x + 32);
-            s1 = load<ALIGNED>(sb + 4 * x + 32);
-            __m128i right = red_by_2(s0, s1, s1, one);
-
-            center = red_by_2_h_rgba(left, center, right, one);
-            stream(dstp + 2 * x, center);
-
-            left = right;
         }
         if ((width & 1) == 0) {
-            auto d = reinterpret_cast<RGBA*>(dstp) + width / 2 - 1;
-            auto sc = reinterpret_cast<const RGBA*>(srcp) + width - 2;
-            auto sd = reinterpret_cast<const RGBA*>(srcp + sstride) + width - 2;
-            *d = (
-                RGBAi(sc[0], 1) + RGBAi(sc[1], 3) +
-                RGBAi(sd[0], 3) + RGBAi(sd[1], 9)).div16<RGBA>();
+            d[width / 2 - 1] = (
+                RGBAi(sa[width - 2], 1) + RGBAi(sa[width - 1], 3) +
+                RGBAi(sb[width - 2], 3) + RGBAi(sb[width - 1], 9)).div16<RGBA>();
         }
     }
 }
@@ -176,7 +168,11 @@ static F_INLINE __m128i red_by_2_h_grey(
 {
     __m128i l = _mm_packus_epi16(_mm_and_si128(l0, mask), _mm_and_si128(l1, mask));
     __m128i m = _mm_packus_epi16(_mm_srli_epi16(l0, 8), _mm_srli_epi16(l1, 8));
+#if defined(__SSSE3__)
+    __m128i r = _mm_alignr_epi8(l2, l, 1);
+#else
     __m128i r = _mm_or_si128(_mm_srli_si128(l, 1), _mm_slli_si128(l2, 15));
+#endif
     return red_by_2(l, m , r, one);
 }
 
