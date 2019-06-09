@@ -9,22 +9,20 @@
 #define RESIZE_HALF_VERSION_PATCH   2
 #define RESIZE_HALF_VERSION_STRING  "0.0.3"
 
-// GCC/clangでx86系用にコンパイルする際は、-mssse3を付けること
+// Add -mssse3 when compiling for x86 with GCC/clang.
 
-// 処理中になんらかのエラーが発生した場合はstd::runtime_errorを投げるので注意
+// Note that this class throws std::runtime_error if any errors occur during processing.
 
-// 用語
-// width:       画像の幅。byte数ではない。
-// rowsize:     画像の各ラインにおける有効データのbyte数
-//                  GREY8ならばwidthと等しい
-//                  RGB888ならばwidth*3
-//                  RGBA8888ならばwidth*4
-// height:      画像の高さ
-// padding:     メモリアライメントを調節するために画像データの各ラインの後ろに
-//              挿入される無効データ領域
-// stride:      画像の各ラインの本当のbyte数(rowsize + padding)
-//                  Windows Bitmapでは、ほとんどの場合4の倍数になる
-//                  SSEを使う場合は16以上の２の累乗の倍数であることが望ましい
+// width:       Image width. The unit is not byte.
+// rowsize:     Number of bytes of valid data in each line of the image.
+//                  This value is equal to width for GRAY8.
+//                  For RGB888, this value is three times the width.
+//                  For RGBA888, this value is four times the width.
+// height:      Image height.
+// padding:     Data inserted after each line of image to adjust memory alignment.
+// stride:      The number of real bytes in each line of the image (rowsize + padding),
+//                  In most cases it will be a multiple of 4 in Windows Bitmap.
+//                  This value should be a multiple of 16 or more power of 2 when using SSE.
 
 
 class ResizeHalf {
@@ -44,72 +42,70 @@ class ResizeHalf {
     void copyToDst(uint8_t* d, const size_t ds) noexcept;
 
 public:
-    // 縮小する画像の形式
+    // Format of image to resize.
     enum FMT : int {
         GREY8       = 1,
         RGB888      = 3,
         RGBA8888    = 4,
     };
 
-    // 縮小方法
+    // Resize method.
     enum MODE : int {
         BILINEAR    = (1 << 8),
-        REDUCE_BY_2 = (1 << 9), // port from VirtualDub filter(ちょっと綺麗かも)
+        REDUCE_BY_2 = (1 << 9), // port from VirtualDub filter (better).
     };
 
-    // format:  処理を行う画像形式
-    // mode:    縮小方法
     ResizeHalf(const FMT format, const MODE mode=REDUCE_BY_2);
     ~ResizeHalf();
 
-    // 処理を行う画像形式を変更する
+    // Change the image format to process.
     void setFormat(const FMT format) noexcept;
 
-    // 縮小方法を変更する
+    // Change the methid to process.
     void setProcMode(const MODE mode) noexcept;
 
-    // 画像を縦横2分の1(小数点以下切り捨て)に縮小する
-    // dstp      : 縮小後の画像を書き込むバッファの先頭アドレス
-    //             nullptrの場合は中間バッファからのコピーを行わない
-    // srcp      : 元画像の先頭アドレス
-    // src_width :　〃　　幅
-    // src_height:　〃　　高さ
-    // dst_stride: 縮小後の画像を書き込むバッファのstride
-    // src_stride: 元画像のstride
-    // ※ dst_strideとsrc_strideは0の場合はそれぞれWindows Bitmapの標準として扱う
+    // Reduce the image to vertical and horizontal halves (round down after the decimal point).
+    // dstp      : Start address of buffer to write the image after reduction.
+    //             If this value is nullptr, do not copy from the intermediate buffer.
+    // srcp      : Start address of original image.
+    // src_width : Width of original image.
+    // src_height: Height of original image.
+    // dst_stride: Stride of processed image.
+    // src_stride: Stride of original image.
+    // ※ If src_stride and dst_stride are 0, they are treated as Windows Bitmap standard respectively.
     void resizeHV(uint8_t* dstp, const uint8_t* srcp, const size_t src_width,
                   const size_t src_height, const size_t dst_stride=0,
                   const size_t src_stride=0);
 
-    // 画像を水平方向のみ2分の1(小数点以下切り捨て)に縮小する
+    // Reduce the image horizontally by half (round down after the decimal point).
     void resizeHorizontal(uint8_t* dstp, const uint8_t* srcp,
                           const size_t src_width, const size_t src_height,
                           const size_t dst_stride=0, const size_t src_stride=0);
 
-    // 画像を垂直方向のみ2分の1(小数点以下切り捨て)に縮小する
+    // Reduce the image vertically by half (round down after the decimal point)
     void resizeVertical(uint8_t* dstp, const uint8_t* srcp,
                         const size_t src_width, const size_t src_height,
                         const size_t dst_stride=0, const size_t src_stride=0);
 
-    // 縮小処理済みの画像データが格納されている中間バッファの先頭アドレスを返す
+    // Returns the start address of the intermediate buffer where processed image data is stored.
     const uint8_t* data() const noexcept { return image; }
 
-    // 中間バッファに現在格納されている縮小済み画像の幅
+    // Returns the width of the processed image currently stored in the intermediate buffer.
     const size_t getWidth() const noexcept { return width; }
 
-    // 中間バッファに現在格納されている縮小済み画像のラインあたりの有効byte数
+    // Returns the number of valid bytes per line of the processed image currently stored in the intermediate buffer.
     const size_t getRowsize() const noexcept { return width * format; }
 
-    // 中間バッファに現在格納されている縮小済み画像の高さ
+    // Returns the hidth of the processed image currently stored in the intermediate buffer.
     const size_t getHeight() const noexcept { return height; }
 
-    // 中間バッファに現在格納されている縮小済み画像のstride
+    // Returns the stride of the processed image currently stored in the intermediate buffer.
     const size_t getStride() const noexcept { return stride; }
 
-    // 現在設定されている処理する画像の形式
+    // Returns the currently set image format to process
     const int getFormat() const noexcept { return format; }
 
-    // 現在設定されている縮小方法
+    // Returns the currently set method to process
     const int getProcMode() const noexcept { return mode; }
 };
 
